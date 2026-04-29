@@ -2,7 +2,7 @@
 <html lang="uk">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#F5F5F7" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>РозділиЧек 🧾</title>
@@ -21,7 +21,26 @@
   </style>
   <style>
     * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
-    body { margin: 0; background: #F5F5F7; -webkit-font-smoothing: antialiased; }
+    :root {
+      --vh: 100vh; /* Дефолтне значення для висоти */
+    }
+    body { 
+      margin: 0; 
+      background: #F5F5F7; 
+      -webkit-font-smoothing: antialiased; 
+      overflow: hidden; /* Забороняємо скрол всього body, скролитиметься лише контент */
+    }
+    .app-wrapper {
+      height: 100vh;
+      height: var(--vh);
+      display: flex;
+      flex-direction: column;
+    }
+    .scroll-content {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch; /* Плавний скрол на iOS */
+    }
     input[type=number]::-webkit-inner-spin-button,
     input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
     input[type=number] { -moz-appearance: textfield; }
@@ -236,6 +255,28 @@
       const [scanError, setScanError]           = useState(null);
       const fileInputRef = useRef(null);
 
+      // Динамічна висота для Telegram Mini App
+      useEffect(() => {
+        const updateHeight = () => {
+          const tg = window.Telegram?.WebApp;
+          const vh = tg?.viewportHeight || window.innerHeight;
+          document.documentElement.style.setProperty('--vh', `${vh}px`);
+        };
+
+        updateHeight();
+        window.addEventListener('resize', updateHeight);
+        if (window.Telegram?.WebApp) {
+          window.Telegram.WebApp.onEvent('viewportChanged', updateHeight);
+        }
+
+        return () => {
+          window.removeEventListener('resize', updateHeight);
+          if (window.Telegram?.WebApp) {
+            window.Telegram.WebApp.offEvent('viewportChanged', updateHeight);
+          }
+        };
+      }, []);
+
       // Ініціалізація з URL
       useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -249,7 +290,6 @@
         }
         setIsLoaded(true);
 
-        // Ініціалізація Telegram WebApp
         if (window.Telegram?.WebApp) {
           window.Telegram.WebApp.ready();
           window.Telegram.WebApp.expand();
@@ -321,7 +361,7 @@
         setTimeout(() => setCopiedLink(false), 2000);
       };
 
-      // Скан чеку (через Worker)
+      // Скан чеку
       const handleImageUpload = async e => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -346,7 +386,6 @@
                   { text: t('aiPrompt') },
                   { inlineData: { mimeType: file.type, data: base64 } }
                 ]}],
-                // Зберігаємо generationConfig, щоб воркер міг коректно передати вимогу до формату
                 generationConfig: {
                   responseMimeType: 'application/json',
                   responseSchema: { type: 'ARRAY', items: { type: 'OBJECT',
@@ -416,130 +455,131 @@
 
       // ────────────────── VIEW MODE ──────────────────
       if (appMode === 'view') return (
-        <div className="min-h-screen bg-[#F5F5F7] text-[#1D1D1F] font-sans pb-32">
-          <div className="max-w-lg mx-auto p-4 sm:p-6 space-y-6">
+        <div className="app-wrapper bg-[#F5F5F7] text-[#1D1D1F] font-sans">
+          <div className="scroll-content">
+            <div className="max-w-lg mx-auto p-4 sm:p-6 space-y-6 pb-12">
+              {!isReadOnly && (
+                <button onClick={() => setAppMode('edit')}
+                  className="flex items-center gap-1 text-[#0071E3] font-medium text-[17px] mt-4 mb-2 hover:opacity-80 transition-opacity">
+                  <ChevronLeft size={20} /> {t('edit')}
+                </button>
+              )}
 
-            {!isReadOnly && (
-              <button onClick={() => setAppMode('edit')}
-                className="flex items-center gap-1 text-[#0071E3] font-medium text-[17px] mt-4 mb-2 hover:opacity-80 transition-opacity">
-                <ChevronLeft size={20} /> {t('edit')}
-              </button>
-            )}
+              <div className="text-center pt-4 pb-2">
+                <h1 className="text-[32px] font-bold tracking-tight">{restaurantName || t('billTitleDefault')}</h1>
+                <p className="text-[#86868b] text-[17px] mt-1">{t('totalToPay')}: {totals.grandTotal.toFixed(2)} {t('currency')}</p>
+              </div>
 
-            <div className="text-center pt-4 pb-2">
-              <h1 className="text-[32px] font-bold tracking-tight">{restaurantName || t('billTitleDefault')}</h1>
-              <p className="text-[#86868b] text-[17px] mt-1">{t('totalToPay')}: {totals.grandTotal.toFixed(2)} {t('currency')}</p>
-            </div>
-
-            <div className="space-y-4">
-              {people.map(person => {
-                const pItems = items.filter(item => item.sharedBy.includes(person.id));
-                const pTotal = totals.personTotals[person.id] || 0;
-                if (!pTotal && !pItems.length) return null;
-                return (
-                  <div key={person.id} className="bg-white rounded-3xl shadow-[0_2px_20px_rgba(0,0,0,0.04)] overflow-hidden">
-                    <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-[#E8E8ED] flex items-center justify-center text-[#1D1D1F] font-bold text-[14px]">
-                          {person.name.charAt(0).toUpperCase()}
-                        </div>
-                        <h2 className="text-[17px] font-semibold">{person.name}</h2>
-                      </div>
-                      <span className="text-[19px] font-bold">
-                        {pTotal.toFixed(2)} <span className="text-[#86868b] text-[15px] font-medium">{t('currency')}</span>
-                      </span>
-                    </div>
-                    <div className="divide-y divide-gray-100">
-                      {pItems.map(item => {
-                        const share = parseFloat(item.price) / item.sharedBy.length;
-                        const cnt = item.sharedBy.length - 1;
-                        return (
-                          <div key={item.id} className="px-6 py-3.5 flex justify-between items-center">
-                            <div className="flex flex-col pr-4">
-                              <span className="text-[15px] font-medium">{item.name || t('unnamedItem')}</span>
-                              {item.sharedBy.length > 1 && (
-                                <span className="text-[13px] text-[#86868b] mt-0.5">
-                                  {t('sharedWith1')} {cnt} {cnt === 1 ? t('sharedWith2Person') : t('sharedWith2People')} ({t('total')} {item.price} {t('currency')})
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[16px] font-medium text-[#86868b] whitespace-nowrap">
-                              {share.toFixed(2)} {t('currency')}
-                            </span>
+              <div className="space-y-4">
+                {people.map(person => {
+                  const pItems = items.filter(item => item.sharedBy.includes(person.id));
+                  const pTotal = totals.personTotals[person.id] || 0;
+                  if (!pTotal && !pItems.length) return null;
+                  return (
+                    <div key={person.id} className="bg-white rounded-3xl shadow-[0_2px_20px_rgba(0,0,0,0.04)] overflow-hidden">
+                      <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-[#E8E8ED] flex items-center justify-center text-[#1D1D1F] font-bold text-[14px]">
+                            {person.name.charAt(0).toUpperCase()}
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {hasPayment && (
-              <div className="bg-white rounded-3xl shadow-[0_2px_20px_rgba(0,0,0,0.04)] overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center gap-2">
-                  <CreditCard size={16} className="text-[#86868b]" />
-                  <h2 className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wider">{t('payment')}</h2>
-                </div>
-                <div className="p-6 space-y-4">
-                  {paymentConfig.useLink && paymentConfig.linkUrl && (
-                    <div className="bg-[#F5F5F7] p-4 rounded-2xl">
-                      <p className="text-[12px] font-medium text-[#86868b] uppercase tracking-wide mb-1">{t('paymentLink')}</p>
-                      <a href={paymentConfig.linkUrl.startsWith('http') ? paymentConfig.linkUrl : `https://${paymentConfig.linkUrl}`}
-                        target="_blank" rel="noopener noreferrer"
-                        className="text-[#0071E3] text-[15px] font-medium hover:underline break-all">
-                        {paymentConfig.linkUrl}
-                      </a>
-                    </div>
-                  )}
-                  {paymentConfig.useCard && paymentConfig.cardNumber && (
-                    <div className="flex justify-between items-center bg-[#F5F5F7] p-4 rounded-2xl">
-                      <div>
-                        <p className="text-[12px] font-medium text-[#86868b] uppercase tracking-wide mb-1">{t('cardNumber')}</p>
-                        <p className="font-mono text-[15px] font-semibold">{paymentConfig.cardNumber}</p>
-                      </div>
-                      <button onClick={() => handleCopy(paymentConfig.cardNumber.replace(/\s/g,''), 'card')}
-                        className="w-10 h-10 flex items-center justify-center bg-white rounded-full shadow-sm text-[#0071E3]">
-                        {copiedField === 'card' ? <Check size={18} className="text-green-500" /> : <Copy size={18} />}
-                      </button>
-                    </div>
-                  )}
-                  {paymentConfig.useIban && (
-                    <>
-                      <div className="flex justify-between items-center bg-[#F5F5F7] p-4 rounded-2xl">
-                        <div className="flex-1 overflow-hidden pr-4">
-                          <p className="text-[12px] font-medium text-[#86868b] uppercase tracking-wide mb-1">{t('ibanAccount')}</p>
-                          <p className="font-mono text-[13px] font-semibold truncate">{paymentConfig.iban}</p>
+                          <h2 className="text-[17px] font-semibold">{person.name}</h2>
                         </div>
-                        <button onClick={() => handleCopy(paymentConfig.iban, 'iban')}
-                          className="w-10 h-10 flex items-center justify-center bg-white rounded-full shadow-sm text-[#0071E3] shrink-0">
-                          {copiedField === 'iban' ? <Check size={18} className="text-green-500" /> : <Copy size={18} />}
+                        <span className="text-[19px] font-bold">
+                          {pTotal.toFixed(2)} <span className="text-[#86868b] text-[15px] font-medium">{t('currency')}</span>
+                        </span>
+                      </div>
+                      <div className="divide-y divide-gray-100">
+                        {pItems.map(item => {
+                          const share = parseFloat(item.price) / item.sharedBy.length;
+                          const cnt = item.sharedBy.length - 1;
+                          return (
+                            <div key={item.id} className="px-6 py-3.5 flex justify-between items-center">
+                              <div className="flex flex-col pr-4">
+                                <span className="text-[15px] font-medium">{item.name || t('unnamedItem')}</span>
+                                {item.sharedBy.length > 1 && (
+                                  <span className="text-[13px] text-[#86868b] mt-0.5">
+                                    {t('sharedWith1')} {cnt} {cnt === 1 ? t('sharedWith2Person') : t('sharedWith2People')} ({t('total')} {item.price} {t('currency')})
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[16px] font-medium text-[#86868b] whitespace-nowrap">
+                                {share.toFixed(2)} {t('currency')}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {hasPayment && (
+                <div className="bg-white rounded-3xl shadow-[0_2px_20px_rgba(0,0,0,0.04)] overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center gap-2">
+                    <CreditCard size={16} className="text-[#86868b]" />
+                    <h2 className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wider">{t('payment')}</h2>
+                  </div>
+                  <div className="p-6 space-y-4">
+                    {paymentConfig.useLink && paymentConfig.linkUrl && (
+                      <div className="bg-[#F5F5F7] p-4 rounded-2xl">
+                        <p className="text-[12px] font-medium text-[#86868b] uppercase tracking-wide mb-1">{t('paymentLink')}</p>
+                        <a href={paymentConfig.linkUrl.startsWith('http') ? paymentConfig.linkUrl : `https://${paymentConfig.linkUrl}`}
+                          target="_blank" rel="noopener noreferrer"
+                          className="text-[#0071E3] text-[15px] font-medium hover:underline break-all">
+                          {paymentConfig.linkUrl}
+                        </a>
+                      </div>
+                    )}
+                    {paymentConfig.useCard && paymentConfig.cardNumber && (
+                      <div className="flex justify-between items-center bg-[#F5F5F7] p-4 rounded-2xl">
+                        <div>
+                          <p className="text-[12px] font-medium text-[#86868b] uppercase tracking-wide mb-1">{t('cardNumber')}</p>
+                          <p className="font-mono text-[15px] font-semibold">{paymentConfig.cardNumber}</p>
+                        </div>
+                        <button onClick={() => handleCopy(paymentConfig.cardNumber.replace(/\s/g,''), 'card')}
+                          className="w-10 h-10 flex items-center justify-center bg-white rounded-full shadow-sm text-[#0071E3]">
+                          {copiedField === 'card' ? <Check size={18} className="text-green-500" /> : <Copy size={18} />}
                         </button>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-[#F5F5F7] p-4 rounded-2xl">
-                          <p className="text-[12px] font-medium text-[#86868b] uppercase tracking-wide mb-1">{t('recipient')}</p>
-                          <p className="text-[14px] font-medium">{paymentConfig.recipient}</p>
+                    )}
+                    {paymentConfig.useIban && (
+                      <>
+                        <div className="flex justify-between items-center bg-[#F5F5F7] p-4 rounded-2xl">
+                          <div className="flex-1 overflow-hidden pr-4">
+                            <p className="text-[12px] font-medium text-[#86868b] uppercase tracking-wide mb-1">{t('ibanAccount')}</p>
+                            <p className="font-mono text-[13px] font-semibold truncate">{paymentConfig.iban}</p>
+                          </div>
+                          <button onClick={() => handleCopy(paymentConfig.iban, 'iban')}
+                            className="w-10 h-10 flex items-center justify-center bg-white rounded-full shadow-sm text-[#0071E3] shrink-0">
+                            {copiedField === 'iban' ? <Check size={18} className="text-green-500" /> : <Copy size={18} />}
+                          </button>
                         </div>
-                        <div className="bg-[#F5F5F7] p-4 rounded-2xl">
-                          <p className="text-[12px] font-medium text-[#86868b] uppercase tracking-wide mb-1">{t('ipnFull')}</p>
-                          <p className="font-mono text-[14px] font-semibold">{paymentConfig.ipn}</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-[#F5F5F7] p-4 rounded-2xl">
+                            <p className="text-[12px] font-medium text-[#86868b] uppercase tracking-wide mb-1">{t('recipient')}</p>
+                            <p className="text-[14px] font-medium">{paymentConfig.recipient}</p>
+                          </div>
+                          <div className="bg-[#F5F5F7] p-4 rounded-2xl">
+                            <p className="text-[12px] font-medium text-[#86868b] uppercase tracking-wide mb-1">{t('ipnFull')}</p>
+                            <p className="font-mono text-[14px] font-semibold">{paymentConfig.ipn}</p>
+                          </div>
                         </div>
-                      </div>
-                      {paymentConfig.purpose && (
-                        <div className="bg-[#F5F5F7] p-4 rounded-2xl">
-                          <p className="text-[12px] font-medium text-[#86868b] uppercase tracking-wide mb-1">{t('paymentPurpose')}</p>
-                          <p className="text-[14px] font-medium">{paymentConfig.purpose}</p>
-                        </div>
-                      )}
-                    </>
-                  )}
+                        {paymentConfig.purpose && (
+                          <div className="bg-[#F5F5F7] p-4 rounded-2xl">
+                            <p className="text-[12px] font-medium text-[#86868b] uppercase tracking-wide mb-1">{t('paymentPurpose')}</p>
+                            <p className="text-[14px] font-medium">{paymentConfig.purpose}</p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
-          <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-xl border-t border-gray-200/50 pb-safe">
+          <div className="shrink-0 p-4 bg-white/80 backdrop-blur-xl border-t border-gray-200/50 pb-safe z-10">
             <div className="max-w-lg mx-auto flex gap-3">
               <button onClick={handleShareUrl}
                 className="flex-1 flex items-center justify-center gap-2 bg-[#F5F5F7] hover:bg-[#E8E8ED] text-[#1D1D1F] text-[15px] font-semibold py-4 rounded-2xl transition-all active:scale-[0.98]">
@@ -558,188 +598,197 @@
 
       // ────────────────── EDIT MODE ──────────────────
       return (
-        <div className="min-h-screen bg-[#F5F5F7] text-[#1D1D1F] font-sans pb-32">
-          <div className="max-w-lg mx-auto p-4 sm:p-6 space-y-6">
+        <div className="app-wrapper bg-[#F5F5F7] text-[#1D1D1F] font-sans">
+          <div className="scroll-content">
+            <div className="max-w-lg mx-auto p-4 sm:p-6 space-y-6 pb-12">
 
-            <div className="pt-4 pb-2">
-              <h1 className="text-[34px] font-bold tracking-tight">{t('newBillTitle')}</h1>
-            </div>
-
-            {/* Заклад */}
-            <div className="bg-white rounded-3xl p-5 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
-              <label className="block text-[13px] font-semibold text-[#86868b] uppercase tracking-wider mb-3">{t('place')}</label>
-              <input type="text" value={restaurantName} onChange={e => setRestaurantName(e.target.value)}
-                placeholder={t('placePlaceholder')}
-                className="w-full bg-[#F5F5F7] text-[17px] px-4 py-3.5 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 placeholder-[#86868b]" />
-            </div>
-
-            {/* Учасники */}
-            <div className="bg-white rounded-3xl p-5 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
-              <div className="flex items-center gap-2 mb-4">
-                <Users size={18} className="text-[#86868b]" />
-                <label className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wider">{t('participants')}</label>
+              <div className="pt-4 pb-2">
+                <h1 className="text-[34px] font-bold tracking-tight">{t('newBillTitle')}</h1>
               </div>
-              <div className="flex flex-wrap gap-2 mb-4">
-                {people.map(p => (
-                  <div key={p.id} className="flex items-center gap-1.5 bg-[#F5F5F7] pl-3 pr-1 py-1 rounded-full">
-                    <span className="text-[15px] font-medium">{p.name}</span>
-                    <button onClick={() => removePerson(p.id)} className="p-1.5 text-[#86868b] hover:text-red-500 rounded-full transition-colors">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <input type="text" value={newPersonName} onChange={e => setNewPersonName(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && addPerson()} placeholder={t('friendNamePlaceholder')}
-                  className="flex-1 bg-[#F5F5F7] text-[17px] px-4 py-3 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 placeholder-[#86868b]" />
-                <button onClick={addPerson} className="bg-[#E8E8ED] hover:bg-[#D1D1D6] px-5 py-3 rounded-2xl font-semibold transition-colors active:scale-95">
-                  {t('add')}
-                </button>
-              </div>
-            </div>
 
-            {/* Позиції */}
-            <div className="bg-white rounded-3xl p-5 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Receipt size={18} className="text-[#86868b]" />
-                  <label className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wider">{t('items')}</label>
+              {/* Заклад */}
+              <div className="bg-white rounded-3xl p-5 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+                <label className="block text-[13px] font-semibold text-[#86868b] uppercase tracking-wider mb-3">{t('place')}</label>
+                <input type="text" value={restaurantName} onChange={e => setRestaurantName(e.target.value)}
+                  placeholder={t('placePlaceholder')}
+                  onFocus={e => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                  className="w-full bg-[#F5F5F7] text-[17px] px-4 py-3.5 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 placeholder-[#86868b]" />
+              </div>
+
+              {/* Учасники */}
+              <div className="bg-white rounded-3xl p-5 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+                <div className="flex items-center gap-2 mb-4">
+                  <Users size={18} className="text-[#86868b]" />
+                  <label className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wider">{t('participants')}</label>
                 </div>
-                <span className="text-[17px] font-semibold text-[#0071E3]">{totals.grandTotal.toFixed(2)} {t('currency')}</span>
-              </div>
-
-              <div className="space-y-4 mb-4">
-                {items.map(item => (
-                  <div key={item.id} className="p-4 bg-[#F5F5F7] rounded-2xl space-y-4">
-                    <div className="flex gap-3">
-                      <input type="text" value={item.name} onChange={e => updateItem(item.id, 'name', e.target.value)}
-                        placeholder={t('whatOrderedPlaceholder')}
-                        className="flex-1 bg-white text-[16px] px-3 py-2.5 rounded-xl focus:outline-none shadow-sm placeholder-[#86868b]" />
-                      <div className="relative w-28 shrink-0">
-                        <input type="number" min="0" step="0.01" value={item.price}
-                          onChange={e => updateItem(item.id, 'price', e.target.value)} placeholder="0.00"
-                          className="w-full bg-white text-[16px] px-3 py-2.5 pr-7 rounded-xl focus:outline-none shadow-sm font-medium" />
-                        <span className="absolute right-3 top-2.5 text-[#86868b] font-medium">{t('currency')}</span>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-[12px] font-medium text-[#86868b] mb-2">{t('whoShares')}</p>
-                      <div className="flex flex-wrap gap-2">
-                        {people.map(person => {
-                          const sel = item.sharedBy.includes(person.id);
-                          return (
-                            <button key={person.id} onClick={() => toggleShare(item.id, person.id)}
-                              className={`text-[14px] px-3.5 py-1.5 rounded-full font-medium transition-all active:scale-95 ${sel ? 'bg-[#1D1D1F] text-white shadow-md' : 'bg-white text-[#86868b] border border-gray-200/60'}`}>
-                              {person.name}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center pt-2 border-t border-gray-200/50">
-                      <span className="text-[13px] text-[#86868b] font-medium">
-                        {item.sharedBy.length > 0 && item.price
-                          ? `${(parseFloat(item.price)/item.sharedBy.length).toFixed(2)} ${t('currency')}`
-                          : t('notSelected')}
-                      </span>
-                      <button onClick={() => removeItem(item.id)} className="flex items-center gap-1 text-[13px] text-red-500 font-medium hover:opacity-80">
-                        <Trash2 size={14} /> {t('delete')}
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {people.map(p => (
+                    <div key={p.id} className="flex items-center gap-1.5 bg-[#F5F5F7] pl-3 pr-1 py-1 rounded-full">
+                      <span className="text-[15px] font-medium">{p.name}</span>
+                      <button onClick={() => removePerson(p.id)} className="p-1.5 text-[#86868b] hover:text-red-500 rounded-full transition-colors">
+                        <Trash2 size={14} />
                       </button>
                     </div>
-                  </div>
-                ))}
-              </div>
-
-              {scanError && (
-                <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-sm font-medium border border-red-100 flex items-center justify-between">
-                  {scanError}
-                  <button onClick={() => setScanError(null)} className="ml-2 text-red-400">×</button>
+                  ))}
                 </div>
-              )}
-
-              <div className="flex gap-3">
-                <button onClick={addItem}
-                  className="flex-1 py-3.5 bg-[#E8E8ED] hover:bg-[#D1D1D6] rounded-2xl flex items-center justify-center gap-2 font-semibold text-[16px] active:scale-[0.98] transition-colors">
-                  <Plus size={18} /> {t('manual')}
-                </button>
-                <button onClick={() => fileInputRef.current?.click()} disabled={isScanning}
-                  className={`flex-1 py-3.5 flex items-center justify-center gap-2 rounded-2xl font-semibold text-[16px] transition-all active:scale-[0.98] ${isScanning ? 'bg-[#0071E3]/60 text-white cursor-not-allowed' : 'bg-[#0071E3] hover:bg-[#0077ED] text-white'}`}>
-                  {isScanning ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
-                  {isScanning ? t('analyzing') : t('scanReceipt')}
-                </button>
-                <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
-              </div>
-            </div>
-
-            {/* Оплата */}
-            <div className="bg-white rounded-3xl p-5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] space-y-4">
-              <div className="flex items-center gap-2 mb-2">
-                <CreditCard size={18} className="text-[#86868b]" />
-                <label className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wider">{t('paymentMethods')}</label>
+                <div className="flex gap-2">
+                  <input type="text" value={newPersonName} onChange={e => setNewPersonName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addPerson()} placeholder={t('friendNamePlaceholder')}
+                    onFocus={e => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                    className="flex-1 bg-[#F5F5F7] text-[17px] px-4 py-3 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 placeholder-[#86868b]" />
+                  <button onClick={addPerson} className="bg-[#E8E8ED] hover:bg-[#D1D1D6] px-5 py-3 rounded-2xl font-semibold transition-colors active:scale-95">
+                    {t('add')}
+                  </button>
+                </div>
               </div>
 
-              {/* Посилання */}
-              <div className="space-y-3">
-                <button onClick={() => updatePay('useLink', !paymentConfig.useLink)} className="flex items-center gap-3 w-full">
-                  <div className={`w-5 h-5 rounded flex items-center justify-center ${paymentConfig.useLink ? 'bg-[#0071E3]' : 'border-2 border-gray-300'}`}>
-                    {paymentConfig.useLink && <Check size={14} className="text-white" />}
+              {/* Позиції */}
+              <div className="bg-white rounded-3xl p-5 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Receipt size={18} className="text-[#86868b]" />
+                    <label className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wider">{t('items')}</label>
                   </div>
-                  <span className="text-[16px] font-medium">{t('paymentLink')}</span>
-                </button>
-                {paymentConfig.useLink && (
-                  <input type="text" value={paymentConfig.linkUrl} onChange={e => updatePay('linkUrl', e.target.value)}
-                    placeholder="https://send.monobank.ua/..."
-                    className="w-full bg-[#F5F5F7] text-[15px] px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 placeholder-[#86868b]" />
-                )}
-              </div>
+                  <span className="text-[17px] font-semibold text-[#0071E3]">{totals.grandTotal.toFixed(2)} {t('currency')}</span>
+                </div>
 
-              {/* Картка */}
-              <div className="space-y-3 pt-2">
-                <button onClick={() => updatePay('useCard', !paymentConfig.useCard)} className="flex items-center gap-3 w-full">
-                  <div className={`w-5 h-5 rounded flex items-center justify-center ${paymentConfig.useCard ? 'bg-[#0071E3]' : 'border-2 border-gray-300'}`}>
-                    {paymentConfig.useCard && <Check size={14} className="text-white" />}
-                  </div>
-                  <span className="text-[16px] font-medium">{t('cardNumber')}</span>
-                </button>
-                {paymentConfig.useCard && (
-                  <input type="text" value={paymentConfig.cardNumber} onChange={e => updatePay('cardNumber', e.target.value)}
-                    placeholder="XXXX XXXX XXXX XXXX"
-                    className="w-full bg-[#F5F5F7] text-[15px] px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 font-mono" />
-                )}
-              </div>
-
-              {/* IBAN */}
-              <div className="space-y-3 pt-2">
-                <button onClick={() => updatePay('useIban', !paymentConfig.useIban)} className="flex items-center gap-3 w-full">
-                  <div className={`w-5 h-5 rounded flex items-center justify-center ${paymentConfig.useIban ? 'bg-[#0071E3]' : 'border-2 border-gray-300'}`}>
-                    {paymentConfig.useIban && <Check size={14} className="text-white" />}
-                  </div>
-                  <span className="text-[16px] font-medium">{t('ibanAccountFull')}</span>
-                </button>
-                {paymentConfig.useIban && (
-                  <div className="space-y-3 bg-[#F5F5F7] p-4 rounded-xl">
-                    {[
-                      { label: 'IBAN', field: 'iban', ph: 'UA29...', mono: true },
-                      { label: t('recipientFull'), field: 'recipient', ph: 'Іванов Іван Іванович', mono: false },
-                      { label: t('ipnFull'), field: 'ipn', ph: '1234567890', mono: true },
-                      { label: t('paymentPurpose'), field: 'purpose', ph: t('defaultPurpose'), mono: false },
-                    ].map(({ label, field, ph, mono }) => (
-                      <div key={field}>
-                        <label className="block text-[12px] font-medium text-[#86868b] mb-1">{label}</label>
-                        <input type="text" value={paymentConfig[field]} onChange={e => updatePay(field, e.target.value)}
-                          placeholder={ph}
-                          className={`w-full bg-white text-[15px] px-3 py-2.5 rounded-lg focus:outline-none ${mono ? 'font-mono' : ''}`} />
+                <div className="space-y-4 mb-4">
+                  {items.map(item => (
+                    <div key={item.id} className="p-4 bg-[#F5F5F7] rounded-2xl space-y-4">
+                      <div className="flex gap-3">
+                        <input type="text" value={item.name} onChange={e => updateItem(item.id, 'name', e.target.value)}
+                          placeholder={t('whatOrderedPlaceholder')}
+                          onFocus={e => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                          className="flex-1 bg-white text-[16px] px-3 py-2.5 rounded-xl focus:outline-none shadow-sm placeholder-[#86868b]" />
+                        <div className="relative w-28 shrink-0">
+                          <input type="number" min="0" step="0.01" value={item.price}
+                            onChange={e => updateItem(item.id, 'price', e.target.value)} placeholder="0.00"
+                            onFocus={e => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                            className="w-full bg-white text-[16px] px-3 py-2.5 pr-7 rounded-xl focus:outline-none shadow-sm font-medium" />
+                          <span className="absolute right-3 top-2.5 text-[#86868b] font-medium">{t('currency')}</span>
+                        </div>
                       </div>
-                    ))}
+                      <div>
+                        <p className="text-[12px] font-medium text-[#86868b] mb-2">{t('whoShares')}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {people.map(person => {
+                            const sel = item.sharedBy.includes(person.id);
+                            return (
+                              <button key={person.id} onClick={() => toggleShare(item.id, person.id)}
+                                className={`text-[14px] px-3.5 py-1.5 rounded-full font-medium transition-all active:scale-95 ${sel ? 'bg-[#1D1D1F] text-white shadow-md' : 'bg-white text-[#86868b] border border-gray-200/60'}`}>
+                                {person.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center pt-2 border-t border-gray-200/50">
+                        <span className="text-[13px] text-[#86868b] font-medium">
+                          {item.sharedBy.length > 0 && item.price
+                            ? `${(parseFloat(item.price)/item.sharedBy.length).toFixed(2)} ${t('currency')}`
+                            : t('notSelected')}
+                        </span>
+                        <button onClick={() => removeItem(item.id)} className="flex items-center gap-1 text-[13px] text-red-500 font-medium hover:opacity-80">
+                          <Trash2 size={14} /> {t('delete')}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {scanError && (
+                  <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-sm font-medium border border-red-100 flex items-center justify-between">
+                    {scanError}
+                    <button onClick={() => setScanError(null)} className="ml-2 text-red-400">×</button>
                   </div>
                 )}
-              </div>
-            </div>
 
+                <div className="flex gap-3">
+                  <button onClick={addItem}
+                    className="flex-1 py-3.5 bg-[#E8E8ED] hover:bg-[#D1D1D6] rounded-2xl flex items-center justify-center gap-2 font-semibold text-[16px] active:scale-[0.98] transition-colors">
+                    <Plus size={18} /> {t('manual')}
+                  </button>
+                  <button onClick={() => fileInputRef.current?.click()} disabled={isScanning}
+                    className={`flex-1 py-3.5 flex items-center justify-center gap-2 rounded-2xl font-semibold text-[16px] transition-all active:scale-[0.98] ${isScanning ? 'bg-[#0071E3]/60 text-white cursor-not-allowed' : 'bg-[#0071E3] hover:bg-[#0077ED] text-white'}`}>
+                    {isScanning ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
+                    {isScanning ? t('analyzing') : t('scanReceipt')}
+                  </button>
+                  <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
+                </div>
+              </div>
+
+              {/* Оплата */}
+              <div className="bg-white rounded-3xl p-5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <CreditCard size={18} className="text-[#86868b]" />
+                  <label className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wider">{t('paymentMethods')}</label>
+                </div>
+
+                {/* Посилання */}
+                <div className="space-y-3">
+                  <button onClick={() => updatePay('useLink', !paymentConfig.useLink)} className="flex items-center gap-3 w-full">
+                    <div className={`w-5 h-5 rounded flex items-center justify-center ${paymentConfig.useLink ? 'bg-[#0071E3]' : 'border-2 border-gray-300'}`}>
+                      {paymentConfig.useLink && <Check size={14} className="text-white" />}
+                    </div>
+                    <span className="text-[16px] font-medium">{t('paymentLink')}</span>
+                  </button>
+                  {paymentConfig.useLink && (
+                    <input type="text" value={paymentConfig.linkUrl} onChange={e => updatePay('linkUrl', e.target.value)}
+                      placeholder="https://send.monobank.ua/..."
+                      onFocus={e => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                      className="w-full bg-[#F5F5F7] text-[15px] px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 placeholder-[#86868b]" />
+                  )}
+                </div>
+
+                {/* Картка */}
+                <div className="space-y-3 pt-2">
+                  <button onClick={() => updatePay('useCard', !paymentConfig.useCard)} className="flex items-center gap-3 w-full">
+                    <div className={`w-5 h-5 rounded flex items-center justify-center ${paymentConfig.useCard ? 'bg-[#0071E3]' : 'border-2 border-gray-300'}`}>
+                      {paymentConfig.useCard && <Check size={14} className="text-white" />}
+                    </div>
+                    <span className="text-[16px] font-medium">{t('cardNumber')}</span>
+                  </button>
+                  {paymentConfig.useCard && (
+                    <input type="text" value={paymentConfig.cardNumber} onChange={e => updatePay('cardNumber', e.target.value)}
+                      placeholder="XXXX XXXX XXXX XXXX"
+                      onFocus={e => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                      className="w-full bg-[#F5F5F7] text-[15px] px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0071E3]/30 font-mono" />
+                  )}
+                </div>
+
+                {/* IBAN */}
+                <div className="space-y-3 pt-2">
+                  <button onClick={() => updatePay('useIban', !paymentConfig.useIban)} className="flex items-center gap-3 w-full">
+                    <div className={`w-5 h-5 rounded flex items-center justify-center ${paymentConfig.useIban ? 'bg-[#0071E3]' : 'border-2 border-gray-300'}`}>
+                      {paymentConfig.useIban && <Check size={14} className="text-white" />}
+                    </div>
+                    <span className="text-[16px] font-medium">{t('ibanAccountFull')}</span>
+                  </button>
+                  {paymentConfig.useIban && (
+                    <div className="space-y-3 bg-[#F5F5F7] p-4 rounded-xl">
+                      {[
+                        { label: 'IBAN', field: 'iban', ph: 'UA29...', mono: true },
+                        { label: t('recipientFull'), field: 'recipient', ph: 'Іванов Іван Іванович', mono: false },
+                        { label: t('ipnFull'), field: 'ipn', ph: '1234567890', mono: true },
+                        { label: t('paymentPurpose'), field: 'purpose', ph: t('defaultPurpose'), mono: false },
+                      ].map(({ label, field, ph, mono }) => (
+                        <div key={field}>
+                          <label className="block text-[12px] font-medium text-[#86868b] mb-1">{label}</label>
+                          <input type="text" value={paymentConfig[field]} onChange={e => updatePay(field, e.target.value)}
+                            placeholder={ph}
+                            onFocus={e => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                            className={`w-full bg-white text-[15px] px-3 py-2.5 rounded-lg focus:outline-none ${mono ? 'font-mono' : ''}`} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
           </div>
 
-          <div className="fixed bottom-0 left-0 right-0 p-4 bg-[#F5F5F7]/80 backdrop-blur-xl border-t border-gray-200/50 pb-safe">
+          <div className="shrink-0 p-4 bg-[#F5F5F7]/80 backdrop-blur-xl border-t border-gray-200/50 pb-safe z-10">
             <div className="max-w-lg mx-auto">
               <button onClick={() => setAppMode('view')}
                 className="w-full flex items-center justify-center gap-2 bg-[#1D1D1F] hover:bg-black text-white text-[17px] font-semibold py-4 rounded-2xl transition-all shadow-[0_4px_14px_rgba(0,0,0,0.15)] active:scale-[0.98]">
