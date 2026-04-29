@@ -8,10 +8,8 @@
   <title>РозділиЧек 🧾</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
 
-  <!-- ① Telegram Mini App SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-  <!-- ② Tailwind CSS (CDN з підтримкою кастомних утиліт) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style type="text/tailwindcss">
     @layer utilities {
@@ -31,25 +29,15 @@
     .animate-spin { animation: spin 1s linear infinite; }
   </style>
 
-  <!-- ③ React 18 + ReactDOM (UMD) -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 
-  <!-- ④ Babel Standalone — перетворює JSX прямо в браузері -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
   <div id="root"></div>
 
-  <!-- ⑤ Весь застосунок у JSX, Babel обробить його при завантаженні -->
   <script type="text/babel">
-    // ─────────────────────────────────────────────────────────
-    // НАЛАШТУВАННЯ: вставте ваш Gemini API ключ (або залиште
-    // порожнім — тоді кнопка «Скан чеку» покаже помилку)
-    // Отримати ключ: https://aistudio.google.com/app/apikey
-    // ─────────────────────────────────────────────────────────
-    const GEMINI_API_KEY = '';
-
     const { useState, useEffect, useMemo, useRef } = React;
 
     // ══════════════════════════════════════════════════════════
@@ -142,7 +130,6 @@
         aiErrorParse: 'Не вдалося розпізнати позиції. Зробіть чіткіше фото.',
         aiErrorFetch: 'Помилка обробки чеку. Спробуйте ще раз.',
         aiErrorFile: 'Помилка читання файлу.',
-        aiErrorNoKey: 'API ключ Gemini не налаштовано.',
         textReportBill: '🧾 Рахунок', textReportTotal: '💰 Загальна сума',
         textReportDetails: '💳 Реквізити', textReportLink: '🔗 Посилання для оплати',
         textReportCard: '💳 Картка', textReportIban: '🏦 IBAN',
@@ -170,7 +157,6 @@
         aiErrorParse: 'Could not read items. Try a clearer photo.',
         aiErrorFetch: 'Receipt processing error. Try again.',
         aiErrorFile: 'File reading error.',
-        aiErrorNoKey: 'Gemini API key is not configured.',
         textReportBill: '🧾 Bill', textReportTotal: '💰 Total',
         textReportDetails: '💳 Payment details', textReportLink: '🔗 Payment link',
         textReportCard: '💳 Card', textReportIban: '🏦 IBAN',
@@ -335,11 +321,10 @@
         setTimeout(() => setCopiedLink(false), 2000);
       };
 
-      // Скан чеку (Gemini Vision)
+      // Скан чеку (через Worker)
       const handleImageUpload = async e => {
         const file = e.target.files?.[0];
         if (!file) return;
-        if (!GEMINI_API_KEY) { setScanError(t('aiErrorNoKey')); if (fileInputRef.current) fileInputRef.current.value = ''; return; }
 
         setIsScanning(true);
         setScanError(null);
@@ -352,7 +337,7 @@
           });
 
           const result = await fetchWithRetry(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+            'https://gemini-proxy.hypnogaja100.workers.dev/',
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -361,6 +346,7 @@
                   { text: t('aiPrompt') },
                   { inlineData: { mimeType: file.type, data: base64 } }
                 ]}],
+                // Зберігаємо generationConfig, щоб воркер міг коректно передати вимогу до формату
                 generationConfig: {
                   responseMimeType: 'application/json',
                   responseSchema: { type: 'ARRAY', items: { type: 'OBJECT',
@@ -399,7 +385,7 @@
           txt += `👤 ${person.name}: ${pTotal.toFixed(2)} ${t('currency')}\n`;
           pItems.forEach(item => {
             const share = parseFloat(item.price) / item.sharedBy.length;
-            txt += `   ▫️ ${item.name || t('unnamedItem')} — ${share.toFixed(2)} ${t('currency')}\n`;
+            txt += `  ▫️ ${item.name || t('unnamedItem')} — ${share.toFixed(2)} ${t('currency')}\n`;
           });
           txt += '\n';
         });
