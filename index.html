@@ -307,40 +307,42 @@
         };
       }, []);
 
-      // ──────────────────────────────────────────────────────────
+    // ──────────────────────────────────────────────────────────
       // НОВИЙ БЛОК: Ініціалізація та нативна кнопка Telegram
       // ──────────────────────────────────────────────────────────
       useEffect(() => {
         const tg = window.Telegram?.WebApp;
-        if (!tg) return; // Захист, якщо відкрито не в Telegram
+        if (!tg) return;
 
         tg.ready();
         tg.expand();
 
-        // Показуємо нативну кнопку
-        tg.MainButton.setText(t('generateBill') || 'Згенерувати рахунок');
-        tg.MainButton.show();
-        
-        // Підлаштовуємо під кольори теми
-        if (tg.themeParams?.button_color) {
-          tg.MainButton.color = tg.themeParams.button_color;
-          tg.MainButton.textColor = tg.themeParams.button_text_color;
+        // Показуємо кнопку ТІЛЬКИ в режимі редагування
+        if (appMode === 'edit') {
+          tg.MainButton.setText(t('generateBill') || 'Згенерувати рахунок');
+          tg.MainButton.show();
+          
+          if (tg.themeParams?.button_color) {
+            tg.MainButton.color = tg.themeParams.button_color;
+            tg.MainButton.textColor = tg.themeParams.button_text_color;
+          }
+
+          const handleMainButtonClick = () => {
+            tg.HapticFeedback?.impactOccurred('medium');
+            validateAndGenerate();
+          };
+
+          tg.onEvent('mainButtonClicked', handleMainButtonClick);
+
+          return () => {
+            tg.offEvent('mainButtonClicked', handleMainButtonClick);
+          };
+        } else {
+          // Ховаємо кнопку в режимі звіту
+          tg.MainButton.hide();
         }
-
-        const handleMainButtonClick = () => {
-          tg.HapticFeedback.impactOccurred('medium');
-          validateAndGenerate(); // Викликаємо твою функцію валідації
-        };
-
-        tg.onEvent('mainButtonClicked', handleMainButtonClick);
-
-        // Відписуємось при закритті/оновленні
-        return () => {
-          tg.offEvent('mainButtonClicked', handleMainButtonClick);
-          // Ховаємо кнопку, якщо переходимо на інший екран
-          tg.MainButton.hide(); 
-        };
-      }, []); // Пусті дужки означають, що це виконається один раз при старті
+      // ОНОВЛЕННЯ: Додали залежності, щоб кнопка завжди "бачила" актуальні товари та режим
+      }, [appMode, items, people, paymentConfig]);
  
       // Ініціалізація з URL
       useEffect(() => {
@@ -387,8 +389,8 @@
       }, [items, people]);
  
       // Учасники
-      const addPerson = () => {
-        tg.HapticFeedback.impactOccurred('light')
+  const addPerson = () => {
+        window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
         if (!newPersonName.trim()) return;
         setPeople(p => [...p, { id: `p${Date.now()}`, name: newPersonName.trim() }]);
         setNewPersonName('');
@@ -564,7 +566,7 @@
  
       // ────────────────── VIEW MODE ──────────────────
       if (appMode === 'view') return (
-        <div className="app-wrapper bg-[#F5F5F7] text-[#1D1D1F] font-sans">
+        <div className="app-wrapper bg-[var(--tg-theme-secondary-bg-color)] text-[var(--tg-theme-text-color)] font-sans">
           <div className="scroll-content">
             <div className="max-w-lg mx-auto p-4 sm:p-6 space-y-6 pb-32">
               {!isReadOnly && (
@@ -932,20 +934,11 @@
                       ))}
                     </div>
                   )}
-                </div>
-              </div>
- 
             </div>
           </div>
- 
-          </div>
-          </div>
-          {/* Стару кнопку видалено, її заміняє tg.MainButton */}
         </div>
       );
     }
- 
-    // Старт
     ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
 </body>
