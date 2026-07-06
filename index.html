@@ -22,6 +22,9 @@
     * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
     :root {
       --vh: 100vh;
+      /* Fallback кольори якщо відкрито поза Telegram (тестування в браузері) */
+      --tg-theme-secondary-bg-color: #F5F5F7;
+      --tg-theme-text-color: #1D1D1F;
     }
     body { 
       margin: 0; 
@@ -934,6 +937,21 @@
                       ))}
                     </div>
                   )}
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <div className="shrink-0 p-4 bg-[#F5F5F7]/80 backdrop-blur-xl border-t border-gray-200/50 pb-safe z-10">
+            <div className="max-w-lg mx-auto space-y-2">
+              {validationError && (
+                <p className="text-center text-[13px] text-red-500 font-medium px-2">⚠️ {validationError}</p>
+              )}
+              <button onClick={validateAndGenerate}
+                className="w-full flex items-center justify-center gap-2 bg-[#1D1D1F] hover:bg-black text-white text-[17px] font-semibold py-4 rounded-2xl transition-all shadow-[0_4px_14px_rgba(0,0,0,0.15)] active:scale-[0.98]">
+                {t('generateBill')}
+              </button>
             </div>
           </div>
         </div>
