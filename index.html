@@ -46,6 +46,17 @@
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
     }
+    /* BUG FIX: input у iOS/WebView НЕ наслідує color від body автоматично.
+       Без цього в темній темі Telegram текст у полях стає невидимим
+       (темний текст на темному фоні). */
+    input, textarea, select {
+      color: var(--tg-theme-text-color);
+    }
+    /* Placeholder має бути трохи тьмяніший за основний текст */
+    input::placeholder, textarea::placeholder {
+      color: var(--tg-theme-hint-color);
+      opacity: 1;
+    }
     input[type=number]::-webkit-inner-spin-button,
     input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
     input[type=number] { -moz-appearance: textfield; }
@@ -350,7 +361,7 @@
       // ОНОВЛЕННЯ: Додали залежності, щоб кнопка завжди "бачила" актуальні товари та режим
       }, [appMode, items, people, paymentConfig]);
  
-      // Ініціалізація з URL
+      // Ініціалізація з URL + примусово застосовуємо тему Telegram
       useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         if (params.get('view') === 'true') { setIsReadOnly(true); setAppMode('view'); }
@@ -362,10 +373,26 @@
           if (saved.paymentConfig)  setPaymentConfig(saved.paymentConfig);
         }
         setIsLoaded(true);
- 
-        if (window.Telegram?.WebApp) {
-          window.Telegram.WebApp.ready();
-          window.Telegram.WebApp.expand();
+
+        const tg = window.Telegram?.WebApp;
+        if (tg) {
+          tg.ready();
+          tg.expand();
+
+          // BUG FIX: Telegram WebApp іноді встановлює CSS-змінні з затримкою або
+          // взагалі не встановлює їх у деяких версіях. Примусово записуємо з themeParams.
+          const applyTheme = () => {
+            const p = tg.themeParams || {};
+            const r = document.documentElement;
+            if (p.bg_color)           r.style.setProperty('--tg-theme-bg-color', p.bg_color);
+            if (p.text_color)         r.style.setProperty('--tg-theme-text-color', p.text_color);
+            if (p.hint_color)         r.style.setProperty('--tg-theme-hint-color', p.hint_color);
+            if (p.secondary_bg_color) r.style.setProperty('--tg-theme-secondary-bg-color', p.secondary_bg_color);
+          };
+
+          applyTheme();
+          tg.onEvent('themeChanged', applyTheme);
+          return () => tg.offEvent('themeChanged', applyTheme);
         }
       }, []);
  
@@ -861,6 +888,15 @@
                   </div>
                 )}
  
+                {/* Помилка валідації (показується коли натиснути кнопку Telegram без заповнення) */}
+                {validationError && (
+                  <div className="mb-3 p-3 rounded-xl text-[13px] font-medium flex items-center justify-between"
+                    style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.25)' }}>
+                    <span>⚠️ {validationError}</span>
+                    <button onClick={() => setValidationError(null)} className="ml-2 opacity-60 hover:opacity-100 text-lg leading-none">×</button>
+                  </div>
+                )}
+
                 <div className="flex gap-3">
                   <button onClick={addItem}
                     className="flex-1 py-3.5 bg-[var(--tg-theme-secondary-bg-color)] border border-[var(--tg-theme-hint-color)]/20 hover:bg-[#D1D1D6] rounded-2xl flex items-center justify-center gap-2 font-semibold text-[16px] active:scale-[0.98] transition-colors">
