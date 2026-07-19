@@ -493,35 +493,11 @@
         setTimeout(() => setCopiedField(null), 2000);
       };
  
-     /// Посилання для шерінгу (Оптимізоване для мобільних браузерів)
+   // Посилання для шерінгу
       const handleShareUrl = async () => {
         const url = new URL(window.location.href);
         url.searchParams.set('view', 'true');
-        const longUrl = url.toString();
-        
-        try {
-          // 1. Запускаємо запит до is.gd та паралельний таймер на 800мс
-          const fetchPromise = fetch(`https://is.gd/create.php?format=json&url=${encodeURIComponent(longUrl)}`);
-          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 800));
-          
-          // Promise.race пропустить те, що виконається швидше
-          const response = await Promise.race([fetchPromise, timeoutPromise]);
-          
-          if (response.ok) {
-            const data = await response.json();
-            // 2. Якщо успішно і швидко - копіюємо коротке
-            await copyText(data.shorturl || longUrl);
-          } else {
-            // Помилка з боку сервера
-            await copyText(longUrl);
-          }
-        } catch (error) {
-          // 3. Якщо сервер відповідає занадто довго (спрацював таймер) або є проблеми з мережею - 
-          // миттєво копіюємо довге посилання, щоб не втратити дозвіл браузера
-          await copyText(longUrl);
-        }
-
-        // 4. Показуємо статус
+        await copyText(url.toString());
         setCopiedLink(true);
         setTimeout(() => setCopiedLink(false), 2000);
       };
