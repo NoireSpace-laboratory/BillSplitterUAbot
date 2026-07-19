@@ -493,31 +493,35 @@
         setTimeout(() => setCopiedField(null), 2000);
       };
  
-     // Посилання для шерінгу (з інтеграцією TinyURL)
+     /// Посилання для шерінгу (Оптимізоване для мобільних браузерів)
       const handleShareUrl = async () => {
-        // 1. Формуємо наше довге посилання
         const url = new URL(window.location.href);
         url.searchParams.set('view', 'true');
         const longUrl = url.toString();
         
         try {
-          // 2. Відправляємо запит до TinyURL
-          const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`);
+          // 1. Запускаємо запит до is.gd та паралельний таймер на 800мс
+          const fetchPromise = fetch(`https://is.gd/create.php?format=json&url=${encodeURIComponent(longUrl)}`);
+          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 800));
+          
+          // Promise.race пропустить те, що виконається швидше
+          const response = await Promise.race([fetchPromise, timeoutPromise]);
           
           if (response.ok) {
-            // 3. Якщо успішно - копіюємо коротке посилання
-            const shortUrl = await response.text();
-            await copyText(shortUrl);
+            const data = await response.json();
+            // 2. Якщо успішно і швидко - копіюємо коротке
+            await copyText(data.shorturl || longUrl);
           } else {
-            // Якщо сервіс недоступний - копіюємо довге як запасний варіант
+            // Помилка з боку сервера
             await copyText(longUrl);
           }
         } catch (error) {
-          // Якщо сталася помилка мережі - копіюємо довге
+          // 3. Якщо сервер відповідає занадто довго (спрацював таймер) або є проблеми з мережею - 
+          // миттєво копіюємо довге посилання, щоб не втратити дозвіл браузера
           await copyText(longUrl);
         }
 
-        // 4. Показуємо статус "Скопійовано"
+        // 4. Показуємо статус
         setCopiedLink(true);
         setTimeout(() => setCopiedLink(false), 2000);
       };
