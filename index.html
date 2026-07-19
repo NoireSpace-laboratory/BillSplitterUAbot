@@ -22,13 +22,16 @@
     * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
     :root {
       --vh: 100vh;
-      /* Fallback кольори якщо відкрито поза Telegram (тестування в браузері) */
+      /* Fallback кольори якщо відкрито поза Telegram */
+      --tg-theme-bg-color: #ffffff;
       --tg-theme-secondary-bg-color: #F5F5F7;
       --tg-theme-text-color: #1D1D1F;
+      --tg-theme-hint-color: #86868b;
     }
     body { 
       margin: 0; 
-      background: #F5F5F7; 
+      background: var(--tg-theme-secondary-bg-color); 
+      color: var(--tg-theme-text-color);
       -webkit-font-smoothing: antialiased; 
       overflow: hidden; 
     }
