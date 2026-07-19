@@ -493,11 +493,31 @@
         setTimeout(() => setCopiedField(null), 2000);
       };
  
-      // Посилання для шерінгу
+      // Посилання для шерінгу (з інтеграцією TinyURL)
       const handleShareUrl = async () => {
+        // 1. Формуємо наше довге посилання
         const url = new URL(window.location.href);
         url.searchParams.set('view', 'true');
-        await copyText(url.toString());
+        const longUrl = url.toString();
+        
+        try {
+          // 2. Відправляємо запит до TinyURL
+          const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`);
+          
+          if (response.ok) {
+            // 3. Якщо успішно - копіюємо коротке посилання
+            const shortUrl = await response.text();
+            await copyText(shortUrl);
+          } else {
+            // Якщо сервіс недоступний - копіюємо довге як запасний варіант
+            await copyText(longUrl);
+          }
+        } catch (error) {
+          // Якщо сталася помилка мережі - копіюємо довге
+          await copyText(longUrl);
+        }
+
+        // 4. Показуємо статус "Скопійовано"
         setCopiedLink(true);
         setTimeout(() => setCopiedLink(false), 2000);
       };
