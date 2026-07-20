@@ -153,6 +153,7 @@
         recipient: 'Отримувач', recipientFull: 'Отримувач (ПІБ або ФОП)',
         ipn: 'ІПН', ipnFull: 'ІПН / ЄДРПОУ', paymentPurpose: 'Призначення платежу',
         edit: 'Редагувати', copied: 'Скопійовано', link: 'Посилання',
+        shorteningLink: 'Скорочуємо...',
         textCopied: 'Скопійовано!', textForMessenger: 'Текст для месенджера',
         place: 'Заклад', placePlaceholder: 'Назва закладу...',
         participants: 'Учасники', friendNamePlaceholder: "Ім'я друга...", add: 'Додати',
@@ -189,6 +190,7 @@
         recipient: 'Recipient', recipientFull: 'Recipient (Full name / Company)',
         ipn: 'TIN', ipnFull: 'TIN / EDRPOU', paymentPurpose: 'Payment purpose',
         edit: 'Edit', copied: 'Copied', link: 'Link',
+        shorteningLink: 'Shortening...',
         textCopied: 'Copied!', textForMessenger: 'Text for messenger',
         place: 'Place', placePlaceholder: 'Restaurant name...',
         participants: 'Participants', friendNamePlaceholder: "Friend's name...", add: 'Add',
@@ -256,6 +258,42 @@
         ta.remove();
       }
     };
+
+    // ══════════════════════════════════════════════════════════
+    // СКОРОЧЕННЯ ПОСИЛАНЬ (без токенів авторизації)
+    // Порядок: TinyURL → is.gd → оригінальне посилання
+    // ══════════════════════════════════════════════════════════
+    const shortenUrl = async (longUrl) => {
+      const withTimeout = (promise, ms) =>
+        Promise.race([promise, new Promise((_, r) => setTimeout(() => r(new Error('timeout')), ms))]);
+
+      // Сервіс 1: TinyURL — GET, повертає plain text, без авторизації
+      try {
+        const res = await withTimeout(
+          fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`),
+          6000
+        );
+        if (res.ok) {
+          const short = (await res.text()).trim();
+          if (short.startsWith('http') && !short.includes('error')) return short;
+        }
+      } catch { /* переходимо до наступного сервісу */ }
+
+      // Сервіс 2: is.gd — GET, plain text, без авторизації, CORS-friendly
+      try {
+        const res = await withTimeout(
+          fetch(`https://is.gd/create.php?format=simple&url=${encodeURIComponent(longUrl)}`),
+          6000
+        );
+        if (res.ok) {
+          const short = (await res.text()).trim();
+          if (short.startsWith('http') && !short.includes('error')) return short;
+        }
+      } catch { /* переходимо до fallback */ }
+
+      // Fallback: повертаємо оригінальне посилання
+      return longUrl;
+    };
  
     // ══════════════════════════════════════════════════════════
     // ГОЛОВНИЙ КОМПОНЕНТ
@@ -284,6 +322,7 @@
       const [copiedField, setCopiedField]       = useState(null);
       const [copiedReport, setCopiedReport]     = useState(false);
       const [copiedLink, setCopiedLink]         = useState(false);
+      const [isShorteningLink, setIsShorteningLink] = useState(false);
       const [isScanning, setIsScanning]         = useState(false);
       const [scanError, setScanError]           = useState(null);
       const [scanSuccess, setScanSuccess]       = useState(null);
@@ -493,11 +532,20 @@
         setTimeout(() => setCopiedField(null), 2000);
       };
  
-   // Посилання для шерінгу
+   // Посилання для шерінгу зі скороченням
       const handleShareUrl = async () => {
+        if (isShorteningLink) return; // захист від подвійного кліку
+        setIsShorteningLink(true);
+
         const url = new URL(window.location.href);
         url.searchParams.set('view', 'true');
-        await copyText(url.toString());
+        const longUrl = url.toString();
+
+        // Спробуємо скоротити; якщо не вдалося — повернеться оригінал
+        const finalUrl = await shortenUrl(longUrl);
+
+        await copyText(finalUrl);
+        setIsShorteningLink(false);
         setCopiedLink(true);
         setTimeout(() => setCopiedLink(false), 2000);
       };
@@ -725,10 +773,20 @@
  
           <div className="shrink-0 p-4 bg-[var(--tg-theme-bg-color)]/80 backdrop-blur-xl border-t border-gray-200/50 pb-safe z-10">
             <div className="max-w-lg mx-auto flex gap-3">
-              <button onClick={handleShareUrl}
-                className="flex-1 flex items-center justify-center gap-2 bg-[var(--tg-theme-secondary-bg-color)] hover:bg-[var(--tg-theme-secondary-bg-color)] border border-[var(--tg-theme-hint-color)]/20 text-[var(--tg-theme-text-color)] text-[15px] font-semibold py-4 rounded-2xl transition-all active:scale-[0.98]">
-                {copiedLink ? <Check size={20} /> : <LinkIcon size={20} />}
-                {copiedLink ? t('copied') : t('link')}
+              <button onClick={handleShareUrl} disabled={isShorteningLink}
+                className={`flex-1 flex items-center justify-center gap-2 border border-[var(--tg-theme-hint-color)]/20 text-[var(--tg-theme-text-color)] text-[15px] font-semibold py-4 rounded-2xl transition-all active:scale-[0.98] ${isShorteningLink ? 'opacity-70 cursor-not-allowed' : 'active:scale-[0.98]'} bg-[var(--tg-theme-secondary-bg-color)]`}>
+                {copiedLink
+                  ? <Check size={20} />
+                  : isShorteningLink
+                    ? <Loader2 size={20} className="animate-spin" />
+                    : <LinkIcon size={20} />
+                }
+                {copiedLink
+                  ? t('copied')
+                  : isShorteningLink
+                    ? t('shorteningLink')
+                    : t('link')
+                }
               </button>
               <button onClick={handleCopyReport}
                 className={`flex-[2] flex items-center justify-center gap-2 text-white text-[16px] font-semibold py-4 rounded-2xl transition-all active:scale-[0.98] ${copiedReport ? 'bg-green-500' : 'bg-[#0071E3] hover:bg-[#0077ED]'}`}>
